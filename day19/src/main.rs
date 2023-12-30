@@ -56,7 +56,7 @@ fn part1(input: &str) -> u32 {
                 } else if condition.chars().nth(1).unwrap() == '>' {
                     operator = Op::GT;
                 }
-                let mut property = "none";
+                let property;
                 property = &condition[0..1];
                 let value = condition
                     .chars()
@@ -132,6 +132,106 @@ fn part1(input: &str) -> u32 {
     sum
 }
 
-fn part2(input: &str) -> u32 {
-    0
+fn part2(input: &str) -> u64 {
+    let mut lines = input.lines();
+    let mut workflows: Vec<Workflow> = Vec::new();
+    loop {
+        let line = lines.next().unwrap();
+        if line.is_empty() {
+            break;
+        }
+        let (workflow_name, workflow_content) = line.split_once("{").unwrap();
+        let workflow_content = workflow_content.strip_suffix("}").unwrap();
+        let workflow_content = workflow_content.split(",");
+        let mut rules = Vec::new();
+        for rule in workflow_content {
+            if rule.contains(':') {
+                let (condition, outcome) = rule.split_once(':').unwrap();
+                let mut operator = Op::None;
+                if condition.chars().nth(1).unwrap() == '<' {
+                    operator = Op::LT;
+                } else if condition.chars().nth(1).unwrap() == '>' {
+                    operator = Op::GT;
+                }
+                let property;
+                property = &condition[0..1];
+                let value = condition
+                    .chars()
+                    .skip(2)
+                    .collect::<String>()
+                    .parse::<u32>()
+                    .unwrap();
+                rules.push(Rule {
+                    op: operator,
+                    property: property.to_string(),
+                    value,
+                    outcome: outcome.to_string(),
+                });
+            } else {
+                rules.push(Rule {
+                    op: Op::None,
+                    property: "none".to_string(),
+                    value: 0,
+                    outcome: rule.to_string(),
+                });
+            }
+        }
+        workflows.push(Workflow {
+            name: workflow_name.to_string(),
+            rules,
+        });
+        eprintln!("Workflow: {:?}", workflows.last().unwrap());
+    }
+    let ranges: HashMap<&str, (u32, u32)> = [
+        ("x", (1, 4000)),
+        ("m", (1, 4000)),
+        ("a", (1, 4000)),
+        ("s", (1, 4000)),
+    ].into();
+    count_accepted(&workflows, "in", &ranges)
+}
+
+fn count_accepted(workflows: &Vec<Workflow>, workflow_name: &str, ranges: &HashMap<&str, (u32, u32)>) -> u64 {
+    if workflow_name == "R" {
+        return 0;
+    }
+    if workflow_name == "A" {
+        let mut product: u64 = 1;
+        for range in ranges.values() {
+            product *= range.1 as u64 - range.0 as u64 + 1;
+        }
+        return product;
+    }
+    let workflow = workflows.iter().find(|w| w.name == *workflow_name).unwrap();
+    let mut total = 0;
+    let mut ranges = ranges.clone();
+    for rule in &workflow.rules {
+        if rule.property == "none" {
+            total += count_accepted(workflows, &rule.outcome, &ranges);
+        } else {
+            let (lo, hi) = ranges.get(&rule.property.as_str()).unwrap();
+            let t;
+            let f;
+            if rule.op == Op::LT {
+                t = (*lo, &rule.value - 1);
+                f = (rule.value, *hi);
+            } else if rule.op == Op::GT {
+                t = (&rule.value + 1, *hi);
+                f = (*lo, rule.value);
+            } else {
+                panic!("Unknown operator {:?}", rule.op);
+            }
+            if t.0 <= t.1 {
+                let mut new_ranges = ranges.clone();
+                new_ranges.insert(&rule.property, t);
+                total += count_accepted(workflows, &rule.outcome, &new_ranges);
+            }
+            if f.0 <= f.1 {
+                ranges.insert(&rule.property, f);
+            } else {
+                break;
+            }
+        }
+    }
+    total
 }
